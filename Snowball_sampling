@@ -1,0 +1,469 @@
+library(tidyverse)
+library(haven)
+library(expss)
+library(RDS)
+library(igraph)
+#sialon<- read_dta(file = "/Users/dongahkim/Dropbox/RDS_snowball/Sialon II_RDS_KG.dta") 
+sialon<- read_dta(file = "/Users/dongahkim/Dropbox/RDS_snowball/RDS_final_Krista.dta", encoding = "latin1") 
+sialon$rec.id <- substr(sialon$RDS_CODE,1,nchar(sialon$RDS_CODE)-1)
+sialon$center <- substr(sialon$RDS_CODE,1,2)
+
+sialon$q16[which(is.na(sialon$q16))] <- 0
+sialon$q18[which(is.na(sialon$q18))] <- 0
+sialon$degree <- sialon$SN_FINAL
+
+sialon$rec.id[which(sialon$rec.id=="IT")] <- 0
+sialon$rec.id[which(sialon$rec.id=="SK")] <- 0
+sialon$rec.id[which(sialon$rec.id=="RO")] <- 0
+sialon$rec.id[which(sialon$rec.id=="LT")] <- 0
+
+q10 <- ifelse(sialon$q10==1,1,0)
+q10[is.na(sialon$q10)] <- 0
+
+
+q11a <- ifelse(sialon$q11a==1,1,0)
+q11a[is.na(sialon$q11a)] <- 0
+q11b<- ifelse(sialon$q11b==1,1,0)
+q11b[is.na(sialon$q11b)] <- 0
+q11c <- ifelse(sialon$q11c==1,1,0)
+
+q11c[is.na(sialon$q11c)] <- 0
+q11d <- ifelse(sialon$q11d==1,1,0)
+q11d[is.na(sialon$q11d)] <- 0
+
+q14 <- ifelse(sialon$q14==1,1,0)
+q14[is.na(sialon$q14)] <- 0
+
+q33 <- ifelse(sialon$q33==1,1,0)
+q33[is.na(sialon$q33)] <- 0
+
+
+sel.sialon <- data.frame(RDS_CODE = sialon$RDS_CODE, age = sialon$age, HIV = sialon$HIV
+                         , current_live =  sialon$q3, where_live = sialon$q4
+                         , HSU = q10, q11a, q11b, q11c, q11d, rec.id = sialon$rec.id
+                         , degree = sialon$degree, center_region = sialon$center
+                         , HIV_testing_history = q14, ART_coverage = q33
+                         , COUPON1 = sialon$COUPON1, COUPON2 = sialon$COUPON2
+                         , COUPON3 = sialon$COUPON3)
+
+sialon.IT <- sel.sialon[which(sel.sialon$center == "IT"),]
+sialon.SK <- sel.sialon[which(sel.sialon$center == "SK"),]
+sialon.RO <- sel.sialon[which(sel.sialon$center == "RO"),]
+sialon.LT <- sel.sialon[which(sel.sialon$center == "LT"),]
+
+########### as.RDS.data
+get.RDS.data <- function(data){
+  RDS.data <- as.rds.data.frame(data, id = "RDS_CODE"
+                                , recruiter.id = "rec.id"
+                                , network.size = "degree")
+  
+  RDS.data$n.rec <- get.number.of.recruits(RDS.data)
+  RDS.data$RDS.degree <- ifelse(RDS.data$rec.id !="0", RDS.data$n.rec+1, RDS.data$n.rec)
+  RDS.data$degree1 <- apply(cbind(RDS.data$RDS.degree, RDS.data$degree), 1, max)
+  RDS.data$C3 <- RDS.data$C2 <- RDS.data$C1 <- NA
+  
+  for(i in 1:dim(RDS.data)[1]){
+    if(length(which(RDS.data$rec.id==RDS.data$RDS_CODE[i]))==0){
+      RDS.data[i,"C1"] <- RDS.data[i,"C2"] <- RDS.data[i,"C3"] <- NA
+    }else if(length(which(RDS.data$rec.id==RDS.data$RDS_CODE[i]))==1){
+      RDS.data[i,"C1"] <- RDS.data$RDS_CODE[which(RDS.data$rec.id==RDS.data$RDS_CODE[i])]
+      RDS.data[i,"C2"] <- RDS.data[i,"C3"] <- NA
+    }else if(length(which(RDS.data$rec.id==RDS.data$RDS_CODE[i]))==2){
+      RDS.data[i,"C1"] <- RDS.data$RDS_CODE[which(RDS.data$rec.id==RDS.data$RDS_CODE[i])][1]
+      RDS.data[i,"C2"] <- RDS.data$RDS_CODE[which(RDS.data$rec.id==RDS.data$RDS_CODE[i])][2]
+      RDS.data[i,"C3"] <- NA
+    }else if(length(which(RDS.data$rec.id==RDS.data$RDS_CODE[i]))==3){
+      RDS.data[i,"C1"] <- RDS.data$RDS_CODE[which(RDS.data$rec.id==RDS.data$RDS_CODE[i])][1]
+      RDS.data[i,"C2"] <- RDS.data$RDS_CODE[which(RDS.data$rec.id==RDS.data$RDS_CODE[i])][2]
+      RDS.data[i,"C3"] <- RDS.data$RDS_CODE[which(RDS.data$rec.id==RDS.data$RDS_CODE[i])][3]
+    }
+  }
+  return(RDS.data)
+}
+
+RDS.IT <- get.RDS.data(sialon.IT)
+RDS.LT <- get.RDS.data(sialon.LT)
+RDS.RO <- get.RDS.data(sialon.RO)
+RDS.SK <- get.RDS.data(sialon.SK)
+
+
+RDS.SK %>% group_by(HSU) %>% 
+  summarise(mean(age, na.rm = TRUE), n = n(), mean(HIV, na.rm = TRUE)
+            , sum(HIV, na.rm = TRUE), mean(HIV_testing_history, na.rm = TRUE)
+            , mean(ART_coverage, na.rm = TRUE)
+            , mean(q11a), mean(q11b), mean(q11c), mean(q11d))
+
+
+pdf("4RDSplots.pdf")
+reingold.tilford.plot(RDS.IT, vertex.color = "HSU", vertex.size = "HIV"
+                      , vertex.size.range = c(2,5), vertex.label = NA, main = "Italy")
+
+reingold.tilford.plot(RDS.LT, vertex.color = "HSU", vertex.size = "HIV"
+                      , vertex.size.range = c(2,5), vertex.label = NA, main = "Lithuania")
+
+reingold.tilford.plot(RDS.RO, vertex.color = "HSU", vertex.size = "HIV"
+                      , vertex.size.range = c(2,5), vertex.label = NA, main = "Rpmania")
+
+reingold.tilford.plot(RDS.SK, vertex.color = "HSU", vertex.size = "HIV"
+                      , vertex.size.range = c(2,5), vertex.label = NA, main = "Slovakia")
+
+
+dev.off()
+
+
+#head(RDS.data)
+
+merge.RDS.IT <- merge(RDS.IT, RDS.IT, by.x = "rec.id", by.y = "RDS_CODE", all.x = TRUE)
+head(merge.RDS.IT)
+merge.RDS.SK <- merge(RDS.SK, RDS.SK, by.x = "rec.id", by.y = "RDS_CODE", all.x = TRUE)
+merge.RDS.RO <- merge(RDS.RO, RDS.RO, by.x = "rec.id", by.y = "RDS_CODE", all.x = TRUE)
+merge.RDS.LT <- merge(RDS.LT, RDS.LT, by.x = "rec.id", by.y = "RDS_CODE", all.x = TRUE)
+
+reingold.tilford.plot(RDS.SK, vertex.color = "given_condom", vertex.size = "HIV"
+                      , vertex.size.range = c(2,5), vertex.label = NA)
+
+table(merge.RDS.IT$HIV.x, merge.RDS.IT$HIV.y)
+table(merge.RDS.LT$HIV.x, merge.RDS.LT$HIV.y)
+table(merge.RDS.RO$HIV.x, merge.RDS.RO$HIV.y)
+table(merge.RDS.SK$HIV.x, merge.RDS.SK$HIV.y)
+
+table(merge.RDS.IT$HSU.x, merge.RDS.IT$HSU.y)
+table(merge.RDS.LT$HSU.x, merge.RDS.LT$HSU.y)
+table(merge.RDS.RO$HSU.x, merge.RDS.RO$HSU.y)
+table(merge.RDS.SK$HSU.x, merge.RDS.SK$HSU.y)
+
+table(merge.RDS$given_condom.x, merge.RDS$HIV.x)
+proportions(table(merge.RDS$given_condom.x, merge.RDS$HIV.x), 1)
+
+
+########################################################################
+## Snowball
+########################################################################
+snowball.data <- function(RDS.data){
+  forsample.data <- data.frame(RDS.data[,c(1,6,22,23,24,11,19,20,21)])
+  snow.data <- data.frame()
+  while(dim(snow.data)[1] < dim(RDS.data)[1]){
+    seed.tmp <- forsample.data[sample(which(forsample.data$HSU==1),1),]
+    snow.data <- rbind(snow.data,data.frame(seed = "0", snow.sample = seed.tmp$RDS_CODE))
+    #print(seed.tmp$degree1)
+    if(seed.tmp$RDS.degree==1 & seed.tmp$rec.id != "0"){
+      snow.sample <- sample(seed.tmp$rec.id, seed.tmp$degree1, replace = TRUE)
+    }else if(seed.tmp$RDS.degree==2 & seed.tmp$rec.id != "0"){
+      snow.sample <- sample(c(seed.tmp$rec.id,seed.tmp$C1), seed.tmp$degree1, replace = TRUE)
+    }else if(seed.tmp$RDS.degree==3 & seed.tmp$rec.id != "0"){
+      snow.sample <- sample(c(seed.tmp$rec.id,seed.tmp$C1, seed.tmp$C2), seed.tmp$degree1, replace = TRUE)
+    }else if(seed.tmp$RDS.degree==4 & seed.tmp$rec.id != "0"){
+      snow.sample <- sample(c(seed.tmp$rec.id,seed.tmp$C1, seed.tmp$C2,seed.tmp$C3), seed.tmp$degree1, replace = TRUE)
+    }else if(seed.tmp$RDS.degree==1 & seed.tmp$rec.id == "0"){
+      snow.sample <- sample(seed.tmp$C1, seed.tmp$degree1, replace = TRUE)
+    }else if(seed.tmp$RDS.degree==2 & seed.tmp$rec.id == "0"){
+      snow.sample <- sample(c(seed.tmp$C1, seed.tmp$C2), seed.tmp$degree1, replace = TRUE)
+    }else if(seed.tmp$RDS.degree==3 & seed.tmp$rec.id == "0"){
+      snow.sample <- sample(c(seed.tmp$C1, seed.tmp$C2, seed.tmp$C3), seed.tmp$degree1, replace = TRUE)
+    }
+    snow.data <- rbind(snow.data,data.frame(seed = rep(seed.tmp$RDS_CODE, seed.tmp$degree1), snow.sample))
+  }
+  snow.data <- snow.data[1:dim(RDS.data)[1],]
+  
+  snow.data$RDS_CODE <- snow.data$snow.sample
+  snow.withcov <- left_join(snow.data, RDS.data, by = "RDS_CODE")
+  
+  snow.withcov$snow_ID <- as.character(1:dim(RDS.data)[1])
+  snow.withcov$snow_recid <- NA
+  snow.withcov$snow_recid[which(snow.withcov$seed == 0)] <- "0"
+  snow.recid <- which(snow.withcov$seed == 0)
+  if(dim(snow.withcov)[1] %in% snow.recid){
+    snow.recid <- snow.recid[1:(length(snow.recid)-1)]
+  }
+  for(i in 1:length(snow.recid)){
+    if(i != length(snow.recid)){
+    snow.withcov$snow_recid[(snow.recid[i]+1):(snow.recid[(i+1)]-1)] <- as.character(snow.recid[i])
+    }else{
+      snow.withcov$snow_recid[(snow.recid[i]+1):dim(snow.withcov)[1]] <- as.character(snow.recid[i])
+    }
+  }
+  return(snow.withcov)
+}
+
+
+snowball.all.HSU <- function(RDS.data){
+  seed <- which(RDS.data$HSU==1)
+  snow.data <- data.frame()
+  snow.data <- rbind(snow.data,data.frame(seed = rep("0", length(seed)), snow.sample = RDS.data$RDS_CODE[seed]))
+  
+  tmp.sample <- cbind(RDS.data$rec.id, RDS.data$C1, RDS.data$C2, RDS.data$C3)
+  tmp.sample[which(tmp.sample[,1]=="0"),1] <- NA
+  rec.id <- seed
+  
+  while(dim(snow.data)[1]<dim(RDS.data)[1]){
+    snow.sample <- rep(NA, length(rec.id))
+    for(i in 1:length(rec.id)){
+      snow.sample[i] <- sample(na.omit(tmp.sample[rec.id[i],]),1)
+    }
+    snow.data <- rbind(snow.data,data.frame(seed = RDS.data$RDS_CODE[rec.id], snow.sample))
+    #rec.id <- match(snow.sample, RDS.data$RDS_CODE)
+  }
+  
+  snow.data <- snow.data[1:dim(RDS.data)[1],]
+  
+  snow.data$RDS_CODE <- snow.data$snow.sample
+  snow.withcov <- left_join(snow.data, RDS.data, by = "RDS_CODE")
+  
+  snow.withcov$snow_ID <- as.character(1:dim(RDS.data)[1])
+  snow.withcov$snow_recid <- NA
+  snow.withcov$snow_recid[which(snow.withcov$seed == 0)] <- "0"
+  snow.withcov$snow_recid[(length(seed)+1):dim(RDS.data)[1]] <- as.character(rep(1:length(seed), ceiling(dim(RDS.data)[1]/length(seed)))[(length(seed)+1):dim(RDS.data)[1]])
+  return(snow.withcov)
+}
+
+
+set.seed(1000)
+snow.IT <- snowball.data(RDS.IT)
+snow.LT <- snowball.data(RDS.LT)
+snow.RO <- snowball.data(RDS.RO)
+snow.SK <- snowball.data(RDS.SK)
+
+
+snow.IT <- snowball.all.HSU(RDS.IT)
+snow.LT <- snowball.all.HSU(RDS.LT)
+snow.RO <- snowball.all.HSU(RDS.RO)
+snow.SK <- snowball.all.HSU(RDS.SK)
+
+snow.IT1 <- as.rds.data.frame(snow.IT, id = "snow_ID"
+                              , recruiter.id = "snow_recid"
+                              , network.size = "degree")
+
+table(snow.IT.data$HSU)
+RDS.I.estimates(rds.data=snow.IT.data ,outcome.variable='HIV')
+RDS.II.estimates(rds.data=snow.IT1 ,outcome.variable='HIV', subset = HSU == "0")
+RDS.II.estimates(rds.data=snow.IT1 ,outcome.variable='HIV', subset = HSU == "1")
+
+snow.LT1 <- as.rds.data.frame(snow.LT, id = "snow_ID"
+                              , recruiter.id = "snow_recid"
+                              , network.size = "degree")
+
+snow.RO1 <- as.rds.data.frame(snow.RO, id = "snow_ID"
+                              , recruiter.id = "snow_recid"
+                              , network.size = "degree")
+
+snow.SK1 <- as.rds.data.frame(snow.SK, id = "snow_ID"
+                              , recruiter.id = "snow_recid"
+                              , network.size = "degree")
+
+pdf("snowballplot.all.HSU.pdf")
+reingold.tilford.plot(snow.IT1, vertex.color = "HSU", vertex.size = "HIV"
+                      , vertex.size.range = c(2,5), vertex.label = NA
+                      , main = "Italy")
+
+reingold.tilford.plot(snow.LT1, vertex.color = "HSU", vertex.size = "HIV"
+                      , vertex.size.range = c(2,5), vertex.label = NA, main = "Lithuania")
+
+reingold.tilford.plot(snow.RO1, vertex.color = "HSU", vertex.size = "HIV"
+                      , vertex.size.range = c(2,5), vertex.label = NA, main = "Romania")
+
+reingold.tilford.plot(snow.SK1, vertex.color = "HSU", vertex.size = "HIV"
+                      , vertex.size.range = c(2,5), vertex.label = NA, main = "Slovakia")
+
+dev.off()
+
+sialon.est <- function(data, RDS.data){
+  res <- data.frame()
+  aa <- data %>% 
+    summarise(n = n(), sum(HSU, na.rm = TRUE), mean(age, na.rm = TRUE),  mean(HIV, na.rm = TRUE)
+              , mean(HIV_testing_history, na.rm = TRUE)
+              , sum(ART_coverage[which(HIV==1)], na.rm = TRUE)/sum(HIV, na.rm = TRUE))
+  a0 <- RDS.II.estimates(rds.data=RDS.data ,outcome.variable='HIV')
+  a1 <- RDS.II.estimates(rds.data=RDS.data ,outcome.variable='HIV_testing_history')
+  a2 <- RDS.II.estimates(rds.data=RDS.data ,outcome.variable='ART_coverage', subset = HIV == 1)
+
+  res <- as.data.frame(cbind(aa, a0$estimate, a0$interval[2], a0$interval[3]
+               , a1$estimate, a1$interval[2], a1$interval[3]
+               , a2$estimate, a2$interval[2], a2$interval[3]))
+  
+  return(res)
+}
+
+
+est.res <- rbind(sialon.est (sialon.IT, RDS.IT), sialon.est (sialon.LT, RDS.LT)
+      , sialon.est (sialon.RO, RDS.LT), sialon.est (sialon.SK, RDS.LT))
+
+est.res
+snowball.rep <- function(RDS.data, setseed = 1001, iter = 100, snowball.sampleway = snowball.all.HSU){
+  set.seed(setseed)
+  snow.data <- snowball.sampleway(RDS.data)
+  
+  aa <- snow.data %>% 
+    summarise(n = n(), mean(age, na.rm = TRUE),  mean(HIV, na.rm = TRUE)
+              , sum(HIV, na.rm = TRUE), mean(HIV_testing_history, na.rm = TRUE)
+              , sum(ART_coverage[which(snow.data$HIV==1)], na.rm = TRUE)/sum(HIV, na.rm = TRUE))
+  
+  HSU <- as.data.frame(aa)
+  
+  snow.data1 <- as.rds.data.frame(snow.data, id = "snow_ID"
+                                , recruiter.id = "snow_recid"
+                                , network.size = "degree")
+  
+  a0 <- RDS.II.estimates(rds.data=snow.data1 ,outcome.variable='HIV')
+  a1 <- RDS.II.estimates(rds.data=snow.data1 ,outcome.variable='HIV_testing_history')
+  a2 <- RDS.II.estimates(rds.data=snow.data1 ,outcome.variable='ART_coverage', subset = HIV == 1)
+  HSU <- cbind(HSU, a0$estimate, a0$interval[2], a0$interval[3]
+               , a1$estimate, a1$interval[2], a1$interval[3]
+               , a2$estimate, a2$interval[2], a2$interval[3])
+
+  for(i in 2:iter){
+    set.seed(setseed+i)
+    snow.data <- snowball.sampleway(RDS.data)
+    
+    aa <- snow.data %>% 
+      summarise(n = n(), mean(age, na.rm = TRUE),  mean(HIV, na.rm = TRUE)
+                , sum(HIV, na.rm = TRUE), mean(HIV_testing_history, na.rm = TRUE)
+                , sum(ART_coverage[which(snow.data$HIV==1)], na.rm = TRUE)/sum(HIV, na.rm = TRUE))
+    
+    snow.data1 <- as.rds.data.frame(snow.data, id = "snow_ID"
+                                    , recruiter.id = "snow_recid"
+                                    , network.size = "degree")
+    
+    a0 <- RDS.II.estimates(rds.data=snow.data1 ,outcome.variable='HIV')
+    a1 <- RDS.II.estimates(rds.data=snow.data1 ,outcome.variable='HIV_testing_history')
+    if(length(which(snow.data1$HIV==1))==0){
+      a2 <- a0
+    }else{
+      a2 <- RDS.II.estimates(rds.data=snow.data1 ,outcome.variable='ART_coverage', subset = HIV == 1)
+    }
+    
+    
+    HSU <- rbind(HSU, as.data.frame(cbind(aa, a0$estimate, a0$interval[2], a0$interval[3]
+                                          , a1$estimate, a1$interval[2], a1$interval[3]
+                                          , a2$estimate, a2$interval[2], a2$interval[3])))
+    
+    print(i)
+  }
+ return(HSU) 
+}
+
+
+IT.rep <- snowball.rep(RDS.data = RDS.IT, 1001)
+head(IT.rep)
+dim(IT.rep)
+
+apply(IT.rep, 2, mean)
+apply(IT.rep, 2, quantile, probs = c(0.025, 0.5, 0.975))
+
+LT.rep <- snowball.rep(RDS.data = RDS.LT, 1001)
+#RDS.RO$degree[which(RDS.RO$degree==500)] <- 100
+RO.rep <- snowball.rep(RDS.data = RDS.RO, 1001)
+SK.rep <- snowball.rep(RDS.data = RDS.SK, 1001)
+
+n <- 3
+x0s <- 1:n - 0.4
+x1s <- 1:n + 0.4
+pdf("snowball.all.HSU.HIV.pdf")
+boxplot(IT.rep[,c(3,5,6)], col = c(1,2,3), xaxt = "n", main = "Italy (mean)", cex.main = 2, cex.axis = 1.5)
+axis(1, at=1:3,labels=c("mean(HIV)", "HIV test history", "ART coverage"), cex.axis = 1.4)
+segments(x0 = x0s, x1 = x1s, y0 = c(est.res[1,4], est.res[1,5], est.res[1,6]), col = "red", lwd = 2)
+legend("topleft", lwd = 2, lty = 1, col = "red", legend = "original RDS data", cex = 1.5)
+
+boxplot(LT.rep[,c(3,5,6)], col = c(1,2,3), xaxt = "n", main = "Lithuania (mean)", cex.main = 2, cex.axis = 1.5)
+axis(1, at=1:3,labels=c("mean(HIV)", "HIV test history", "ART coverage"), cex.axis = 1.4)
+segments(x0 = x0s, x1 = x1s, y0 = c(est.res[2,4], est.res[2,5], est.res[2,6]), col = "red", lwd = 2)
+legend("topleft", lwd = 2, lty = 1, col = "red", legend = "original RDS data", cex = 1.5)
+
+boxplot(RO.rep[,c(3,5,6)], col = c(1,2,3), xaxt = "n", main = "Romania (mean)", cex.main = 2, cex.axis = 1.5)
+axis(1, at=1:3,labels=c("mean(HIV)", "HIV test history", "ART coverage"), cex.axis = 1.4)
+segments(x0 = x0s, x1 = x1s, y0 = c(est.res[3,4], est.res[3,5], est.res[3,6]), col = "red", lwd = 2)
+legend("topleft", lwd = 2, lty = 1, col = "red", legend = "original RDS data", cex = 1.5)
+
+boxplot(SK.rep[,c(3,5,6)], col = c(1,2,3), xaxt = "n", main = "Slovakia (mean)", cex.main = 2, cex.axis = 1.5)
+axis(1, at=1:3,labels=c("mean(HIV)", "HIV test history", "ART coverage"), cex.axis = 1.4)
+segments(x0 = x0s, x1 = x1s, y0 = c(est.res[4,4], est.res[4,5], est.res[4,6]), col = "red", lwd = 2)
+legend("topleft", lwd = 2, lty = 1, col = "red", legend = "original RDS data", cex = 1.5)
+
+boxplot(IT.rep[,c(7,10,13)], col = c(1,2,3), xaxt = "n", main = "Italy (RDS II est)", cex.main = 2, cex.axis = 1.5)
+axis(1, at=1:3,labels=c("mean(HIV)", "HIV test history", "ART coverage"), cex.axis = 1.4)
+segments(x0 = x0s, x1 = x1s, y0 = c(est.res[1,7], est.res[1,10], est.res[1,13]), col = "red", lwd = 2)
+legend("topleft", lwd = 2, lty = 1, col = "red", legend = "original RDS data", cex = 1.5)
+
+boxplot(LT.rep[,c(7,10,13)], col = c(1,2,3), xaxt = "n", main = "Lithuania (RDS II est)", cex.main = 2, cex.axis = 1.5)
+axis(1, at=1:3,labels=c("mean(HIV)", "HIV test history", "ART coverage"), cex.axis = 1.4)
+segments(x0 = x0s, x1 = x1s, y0 = c(est.res[2,7], est.res[2,10], est.res[2,13]), col = "red", lwd = 2)
+legend("topleft", lwd = 2, lty = 1, col = "red", legend = "original RDS data", cex = 1.5)
+
+boxplot(RO.rep[,c(7,10,13)], col = c(1,2,3), xaxt = "n", main = "Romania (RDS II est)", cex.main = 2, cex.axis = 1.5)
+axis(1, at=1:3,labels=c("mean(HIV)", "HIV test history", "ART coverage"), cex.axis = 1.4)
+segments(x0 = x0s, x1 = x1s, y0 = c(est.res[3,7], est.res[3,10], est.res[3,13]), col = "red", lwd = 2)
+legend("topleft", lwd = 2, lty = 1, col = "red", legend = "original RDS data", cex = 1.5)
+
+boxplot(SK.rep[,c(7,10,13)], col = c(1,2,3), xaxt = "n", main = "Slovakia (RDS II est)", cex.main = 2, cex.axis = 1.5)
+axis(1, at=1:3,labels=c("mean(HIV)", "HIV test history", "ART coverage"), cex.axis = 1.4)
+segments(x0 = x0s, x1 = x1s, y0 = c(est.res[4,7], est.res[4,10], est.res[4,13]), col = "red", lwd = 2)
+legend("topleft", lwd = 2, lty = 1, col = "red", legend = "original RDS data", cex = 1.5)
+
+dev.off()
+
+
+
+RDStesthistory <- matrix(c(0.375, 0.574, 0.231, 0.568, 0.308, 0.6, 0.340, 0.466), nrow = 4, byrow = TRUE)
+RDStesthistory
+
+RDSHSU <- matrix(c(259,141,160,162,78,105, 297,103), nrow = 4, byrow = TRUE)
+RDSHSU
+
+RDSHIV <- matrix(c(20,12,4,4,8,28,14,6), nrow = 4, byrow = TRUE)
+RDSHIV
+
+n <- 8
+x0s <- 1:n - 0.4
+x1s <- 1:n + 0.4
+
+pdf("HIVtesthistory.n.pdf")
+boxplot(c(IT.rep[,c(6,16)],LT.rep[,c(6,16)],RO.rep[,c(6,16)], SK.rep[,c(6,16)]), col = c(1,1,2,2,3,3,4,4), xaxt = "n", main = "Snowball HIV test history", cex.main = 2)
+axis(1, at=c(1.5, 3.5, 5.5, 7.5),labels=c("Italy", "Lithuania", "Romania", "Slovakia"), cex = 2)
+axis(side=1, at=1:8, mgp=c(0,0.2,0), labels=c(rep(c("0","1"),4)))
+segments(x0 = x0s, x1 = x1s, y0 = c(RDStesthistory[1,],RDStesthistory[2,],RDStesthistory[3,],RDStesthistory[4,]), col = "red", lwd = 2)
+
+boxplot(c(IT.rep[,c(2,12)],LT.rep[,c(2,12)],RO.rep[,c(2,12)], SK.rep[,c(2,12)]), col = c(1,1,2,2,3,3,4,4), xaxt = "n", main = "Snowball # of HSU", cex.main = 2)
+axis(1, at=c(1.5, 3.5, 5.5, 7.5),labels=c("Italy", "Lithuania", "Romania", "Slovakia"), cex = 2)
+axis(side=1, at=1:8, mgp=c(0,0.2,0), labels=c(rep(c("0","1"),4)))
+segments(x0 = x0s, x1 = x1s, y0 = c(RDSHSU[1,],RDSHSU[2,],RDSHSU[3,],RDSHSU[4,]), col = "red", lwd = 2)
+
+boxplot(c(IT.rep[,c(2,12)],LT.rep[,c(5,15)],RO.rep[,c(5,15)], SK.rep[,c(5,15)]), col = c(1,1,2,2,3,3,4,4), xaxt = "n", main = "Snowball # of HIV", cex.main = 2)
+axis(1, at=c(1.5, 3.5, 5.5, 7.5),labels=c("Italy", "Lithuania", "Romania", "Slovakia"), cex = 2)
+axis(side=1, at=1:8, mgp=c(0,0.2,0), labels=c(rep(c("0","1"),4)))
+segments(x0 = x0s, x1 = x1s, y0 = c(RDSHIV[1,],RDSHIV[2,],RDSHIV[3,],RDSHIV[4,]), col = "red", lwd = 2)
+dev.off()
+
+
+########################################################################
+## RDS sample
+########################################################################
+
+RDS.IT %>% group_by(HSU) %>% 
+  summarise(n = n(), mean(age, na.rm = TRUE),  mean(HIV, na.rm = TRUE)
+            , sum(HIV, na.rm = TRUE), mean(HIV_testing_history, na.rm = TRUE)
+            , mean(ART_coverage, na.rm = TRUE))
+
+RDS.II <- matrix(NA, nrow =4, ncol = 2)
+RDS.II[1,1] <- RDS.II.estimates(rds.data=RDS.IT ,outcome.variable='HIV', subset = HSU == "0")$estimate
+RDS.II[1,2] <- RDS.II.estimates(rds.data=RDS.IT ,outcome.variable='HIV', subset = HSU == "1")$estimate
+
+RDS.II[2,1] <- RDS.II.estimates(rds.data=RDS.LT ,outcome.variable='HIV', subset = HSU == "0")$estimate
+RDS.II[2,2] <- RDS.II.estimates(rds.data=RDS.LT ,outcome.variable='HIV', subset = HSU == "1")$estimate
+
+RDS.II[3,1] <- RDS.II.estimates(rds.data=RDS.RO ,outcome.variable='HIV', subset = HSU == "0")$estimate
+RDS.II[3,2] <- RDS.II.estimates(rds.data=RDS.RO ,outcome.variable='HIV', subset = HSU == "1")$estimate
+
+RDS.II[4,1] <- RDS.II.estimates(rds.data=RDS.SK ,outcome.variable='HIV', subset = HSU == "0")$estimate
+RDS.II[4,2] <- RDS.II.estimates(rds.data=RDS.SK ,outcome.variable='HIV', subset = HSU == "1")$estimate
+
+RDS.II
+
+meanHIV <- matrix(c(0.0772, 0.0851, 0.025, 0.0247, 0.103, 0.267, 0.0471, 0.0583), nrow = 4, byrow = TRUE)
+meanHIV
+
+RDS.sample <- function(RDS.data){
+  
+}
+
+
+
+
