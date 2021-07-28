@@ -4,7 +4,7 @@ library(expss)
 library(RDS)
 library(igraph)
 #sialon<- read_dta(file = "/Users/dongahkim/Dropbox/RDS_snowball/Sialon II_RDS_KG.dta") 
-sialon<- read_dta(file = "/Users/dongahkim/Dropbox/RDS_snowball/RDS_final_Krista.dta", encoding = "latin1") 
+sialon<- read_dta(file = "/Users/dongahkim/OneDrive/RDS_snowball/Data/RDS_final_Krista.dta", encoding = "latin1") 
 sialon$rec.id <- substr(sialon$RDS_CODE,1,nchar(sialon$RDS_CODE)-1)
 sialon$center <- substr(sialon$RDS_CODE,1,2)
 
@@ -56,5 +56,7 @@ sel.sialon <- data.frame(RDS_CODE = sialon$RDS_CODE, age = sialon$age, HIV = sia
                          , yourself = sialon$q45, homosexual
                          , COUPON1 = sialon$COUPON1, COUPON2 = sialon$COUPON2
                          , COUPON3 = sialon$COUPON3)
+
+write.csv(sel.sialon, "sel.sialon.csv")
 
 #write.csv(sel.sialon, "sel.sialon.csv")
