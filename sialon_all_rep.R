@@ -121,13 +121,13 @@ sialon.est <- function(data, RDS.data){
   
   
   var.RDS <- c(myvar,yourself.var, occupation.var)
-  res.RDS <- matrix(NA, ncol = 6, nrow = length(var.RDS))
+  res.RDS <- c()
   for(k in 1:length(var.RDS)){
-   res.RDS[k,] <-  get(var.RDS[k])$interval[1,]
+   res.RDS <-  as.data.frame(cbind(res.RDS, get(var.RDS[k])$interval[1,1:3]))
   }
   
-  rownames(res.RDS) <- var.RDS
-  colnames(res.RDS) <- c("Estimate", "95% LCI", "95% UCI", "Design Effect", "Std. Error","N")
+  colnames(res.RDS) <- var.RDS
+  #colnames(res.RDS) <- c("Estimate", "95% LCI", "95% UCI")
   
   
   return(list(res = res, res.RDS = res.RDS))
