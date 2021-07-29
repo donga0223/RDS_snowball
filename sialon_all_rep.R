@@ -63,35 +63,81 @@ print("2.done")
 sialon.est <- function(data, RDS.data){
   res <- data.frame()
   aa <- data %>% 
-    summarise(n = n(), sum(HSU, na.rm = TRUE), mean(age, na.rm = TRUE), mean(HSU, na.rm = TRUE),  mean(HIV, na.rm = TRUE)
+    summarise(n = n(), sum(HSU, na.rm = TRUE), mean(age, na.rm = TRUE),  mean(HIV, na.rm = TRUE), mean(HSU, na.rm = TRUE)
               , mean(HIV_testing_history, na.rm = TRUE)
               , sum(ART_coverage[which(HIV==1)], na.rm = TRUE)/sum(HIV, na.rm = TRUE)
-              , mean(homosexual, na.rm = TRUE))
-  bb <- c()
+              , mean(homosexual, na.rm = TRUE)
+              , mean(other_testing_history, na.rm = TRUE)
+              , mean(howmany_nonsteady_malepartners, na.rm = TRUE)
+              , mean(howmany_nonsteady_malepartners_unprotected, na.rm = TRUE)
+              , mean(injected_drug, na.rm = TRUE))
+
+  yourself <- c()
   for(j in 1:7){
-    bb[j] <- length(which(data$yourself==j))/dim(data)[1]
+    yourself[j] <- length(which(data$yourself==j))/(dim(data)[1]-sum(is.na(data$yourself)))
+  }
+  occupation <- c()
+  for(j in 1:7){
+    occupation[j] <- length(which(data$current_occupation==j))/(dim(data)[1]-sum(is.na(data$current_occupation)))
   }
   
-  a00 <- RDS.II.estimates(rds.data=RDS.data ,outcome.variable='HSU')
-  a0 <- RDS.II.estimates(rds.data=RDS.data ,outcome.variable='HIV')
-  a1 <- RDS.II.estimates(rds.data=RDS.data ,outcome.variable='HIV_testing_history')
-  a2 <- RDS.II.estimates(rds.data=RDS.data ,outcome.variable='ART_coverage', subset = HIV == 1)
-  a3 <- RDS.II.estimates(rds.data=RDS.data ,outcome.variable='homosexual')
-  a4 <- RDS.II.estimates(rds.data=RDS.data ,outcome.variable='age')
+  res <- as.data.frame(cbind(aa, t(yourself), t(occupation)))
+  names(res) <- c("n", "n.HSU", "age", "HIV", "HSU", "HIV testing history"
+                  , "ART", "homosexual", "othertesting history"
+                  , "howmany_nonsteady_malepartners", "howmany_nonsteady_malepartners_unprotected"
+                  , "injected_drug", "y1.homosexual", "y2.bisexual", "y3.stright"
+                  , "y4.any other", "y5.don't use a term", "y6.don't know", "y7.other"
+                  , "o1.employed", "o2.self employed", "o3.unemployed", "o4.student"
+                  , "o5.retired", "o6.sick leave", "o7.other")
   
-  res <- as.data.frame(cbind(aa, a00$estimate, a00$interval[2], a00$interval[3]
-                             , a0$estimate, a0$interval[2], a0$interval[3]
-                             , a1$estimate, a1$interval[2], a1$interval[3]
-                             , a2$estimate, a2$interval[2], a2$interval[3]
-                             , t(bb), a3$estimate, a3$interval[2], a3$interval[3]
-                             , a4$estimate, a4$interval[2], a4$interval[3]))
+  myvar <- c("age", "HIV", "HSU", "HIV_testing_history"
+             , "ART_coverage", "homosexual", "other_testing_history"
+             , "howmany_nonsteady_malepartners", "howmany_nonsteady_malepartners_unprotected"
+             , "injected_drug")
+  for(k in 1:length(myvar)){
+    if(myvar[k] == "ART_coverage"){
+      assign(myvar[k], RDS.II.estimates(rds.data=RDS.data ,outcome.variable=myvar[k], subset = HIV == 1))
+    }else{
+      assign(myvar[k], RDS.II.estimates(rds.data=RDS.data ,outcome.variable=myvar[k]))
+    }
+  }
   
-  return(res)
+  yourself.var <- c("y1.homosexual", "y2.bisexual", "y3.stright"
+                    , "y4.any other", "y5.don't use a term", "y6.don't know", "y7.other")
+  for(j in 1:7){
+    RDS.data$yourself.II <- ifelse(RDS.data$yourself==j, 1, 0)
+    RDS.data$yourself.II[which(is.na(RDS.data$yourself))] <- NA
+    assign(yourself.var[j], RDS.II.estimates(rds.data=RDS.data ,outcome.variable = "yourself.II"))
+  }
+  
+  occupation.var <- c("o1.employed", "o2.self employed", "o3.unemployed", "o4.student"
+                    , "o5.retired", "o6.sick leave", "o7.other") 
+  
+  for(j in 1:7){
+    RDS.data$occupation.II <- ifelse(RDS.data$current_occupation==j, 1, 0)
+    RDS.data$occupation.II[which(is.na(RDS.data$current_occupation))] <- NA
+    assign(occupation.var[j], RDS.II.estimates(rds.data=RDS.data ,outcome.variable = "occupation.II"))
+  }
+  
+  
+  var.RDS <- c(myvar,yourself.var, occupation.var)
+  res.RDS <- matrix(NA, ncol = 6, nrow = length(var.RDS))
+  for(k in 1:length(var.RDS)){
+   res.RDS[k,] <-  get(var.RDS[k])$interval[1,]
+  }
+  
+  rownames(res.RDS) <- var.RDS
+  colnames(res.RDS) <- c("Estimate", "95% LCI", "95% UCI", "Design Effect", "Std. Error","N")
+  
+  
+  return(list(res = res, res.RDS = res.RDS))
 }
 
 
-est.res <- rbind(sialon.est(sialon.IT, RDS.IT), sialon.est(sialon.LT, RDS.LT)
-                 , sialon.est(sialon.RO, RDS.RO), sialon.est(sialon.SK, RDS.SK))
+est.IT <- sialon.est(sialon.IT, RDS.IT)
+est.LT <- sialon.est(sialon.LT, RDS.LT)
+est.RO <- sialon.est(sialon.RO, RDS.RO)
+est.SK <- sialon.est(sialon.SK, RDS.SK)
 
 
 print("3.done")
