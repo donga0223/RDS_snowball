@@ -267,6 +267,7 @@ snowball.wave2 <- function(RDS.data, sample.size = dim(RDS.data)[1]
   return(snow.withcov)
 }
 
+
 RDS.sample.dongah <- function(RDS.data, sample.size = dim(RDS.data)[1]
                               , number.of.coupons = 3, sample.with.replacement = TRUE){
   number.of.seeds <- length(unique(get.seed.id(RDS.data)))
@@ -280,28 +281,32 @@ RDS.sample.dongah <- function(RDS.data, sample.size = dim(RDS.data)[1]
   j <- 1  ## wave 
   k <- 1  ## n.participants in j-1 waves
   l <- number.of.seeds+1  ## new.ID
-  
+  rec.num <- c()
   #rec.num1 <- sample(0:number.of.coupons, dim(RDS.data)[1], replace = TRUE)
   while(dim(snow.data)[1]<dim(RDS.data)[1]){
     for(i in k:(k+length(which(snow.data$wave==(j-1)))-1)){
-      rec.num <- sample(0:number.of.coupons, 1, prob = c(1.3,2,2,2))
+      rec.num[i] <- sample(0:number.of.coupons, 1)
       #print(rec.num)
-      if(rec.num==0){
+      if(rec.num[i]==0){
         q <- 1
       }else{
         aa <- which(snow.data$RDS.sample.ID[i] == tmp.sample[,1])
-        rec.sample <- sample(na.omit(tmp.sample[aa,2:5]), rec.num, replace = TRUE)
-        snow.data <- rbind(snow.data, data.frame(RDS.recid = rep(tmp.sample[aa,1], rec.num)
-                                                 , RDS.sample.ID = rec.sample, wave = rep(j, rec.num)
-                                                 , RDS.new.recid = rep(snow.data$RDS.new.ID[i], rec.num)
-                                                 , RDS.new.ID = as.character(l:(l+rec.num-1))))
-        l <- l+rec.num ## RDS.new.id
+        rec.sample <- sample(na.omit(tmp.sample[aa,2:5]), rec.num[i], replace = TRUE)
+        snow.data <- rbind(snow.data, data.frame(RDS.recid = rep(tmp.sample[aa,1], rec.num[i])
+                                                 , RDS.sample.ID = rec.sample, wave = rep(j, rec.num[i])
+                                                 , RDS.new.recid = rep(snow.data$RDS.new.ID[i], rec.num[i])
+                                                 , RDS.new.ID = as.character(l:(l+rec.num[i]-1))))
+        l <- l+rec.num[i] ## RDS.new.id
         
       }
       
     }
-    k <- k+length(which(snow.data$wave==(j-1))) ## n.participants in j-1 waves
-    j <- j+1 ## wave
+    if(sum(rec.num[which(snow.data$wave == (j-1))])==0){
+      snow.data <- snow.data[1:max(which(snow.data$wave < j)),]
+    }else{
+      k <- k+length(which(snow.data$wave==(j-1))) ## n.participants in j-1 waves
+      j <- j+1 ## wave
+    }
   }
   snow.data <- snow.data[1:dim(RDS.data)[1],]
   rownames(snow.data) <- as.character(1:dim(RDS.data)[1])
@@ -345,6 +350,31 @@ snowball.rep <- function(RDS.data, setseed = 1001, iter = 100, snowball.samplewa
     aa <- sialon.est(snow.data, snow.RDS)
     HSU <- rbind(HSU, as.data.frame(cbind(aa$res, aa$res.RDS[1,])))
     print(i)
+  }
+  return(HSU) 
+}
+  
+RDS.rep <- function(RDS.data, setseed = 1001, iter = 100, snowball.sampleway){
+  set.seed(setseed)
+  snow.data <- snowball.sampleway(RDS.data)
+  snow.RDS <- as.rds.data.frame(snow.data, id = "RDS.new.ID"
+                                , recruiter.id = "RDS.new.recid"
+                                , network.size = "degree")
+  
+  HSU <- data.frame()
+  aa <- sialon.est(snow.data, snow.RDS)
+  HSU <- as.data.frame(cbind(aa$res, aa$res.RDS[1,]))
+  
+  
+  for(p in 2:iter){
+    set.seed(setseed+p)
+    snow.data <- snowball.sampleway(RDS.data)
+    snow.RDS <- as.rds.data.frame(snow.data, id = "RDS.new.ID"
+                                  , recruiter.id = "RDS.new.recid"
+                                  , network.size = "degree")
+    aa <- sialon.est(snow.data, snow.RDS)
+    HSU <- rbind(HSU, as.data.frame(cbind(aa$res, aa$res.RDS[1,])))
+    print(p)
   }
   return(HSU) 
 }
